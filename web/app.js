@@ -1,4 +1,5 @@
 import { readResults, eventsFor, frameAt, makeDemo } from './records.js';
+import { parseBadgePack } from './badge-pack.js';
 
 const $ = id => document.getElementById(id);
 const video = $('video'), preview = $('preview'), brush = preview.getContext('2d');
@@ -9,6 +10,8 @@ const evidenceText = { auto_badge: 'Badge evidence', auto_bridge: 'Linked track'
 const fmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
 let dataset, index = 0, objectUrl, playing = false, animation = 0, started, startedAt;
 let analysis = { enabled: false, requires_key: false };
+let privateBadges, cancelBrowserRun;
+const browserMaxBytes = 60 * 1024 * 1024;
 
 function stamp(seconds) {
   const centis = Math.round(seconds * 100);
@@ -156,6 +159,7 @@ function load(data, source, file, demo = false) {
   $('intervals').textContent = fmt.format(dataset.events.filter(e => e.status === 'present').length);
   $('seek').max = data.frames.length - 1;
   $('event-filter').value = 'all';
+  $('event-list').scrollTop = 0;
   drawTimeline(); renderEvents(); showFrame(demo ? 38 : 0);
 }
 
@@ -224,30 +228,81 @@ async function api(path, request) {
   return data;
 }
 
-$('analyze-button').addEventListener('click', () => { $('analyze-error').hidden = true; $('analyze-dialog').showModal(); });
+function switchRunMode() {
+  const hosted = $('run-mode').value === 'server';
+  $('badge-label').hidden = hosted;
+  $('key-label').hidden = !hosted || !analysis.requires_key;
+  $('access-key').required = hosted && analysis.requires_key;
+  $('analyze-note').textContent = hosted
+    ? analysis.requires_key ? 'Your MP4 is sent to the configured analysis container.' : 'Run the Python detector on this machine.'
+    : 'The detector runs in your browser. The MP4 and badge pack stay on this device.';
+}
+
+function runInBrowser(file, badges) {
+  return new Promise((resolve, reject) => {
+    const detector = new Worker(new URL('./browser-detector.js', import.meta.url), { type: 'module' });
+    const finish = (result, error) => {
+      detector.terminate(); cancelBrowserRun = undefined; $('cancel-analysis').hidden = true;
+      if (error) reject(error); else resolve(result);
+    };
+    cancelBrowserRun = () => finish(null, new Error('Analysis canceled.'));
+    $('cancel-analysis').hidden = false;
+    detector.onmessage = ({ data }) => {
+      if (data.type === 'progress') notice(data.text);
+      else if (data.type === 'done') finish(data);
+      else if (data.type === 'error') finish(null, new Error(data.text));
+    };
+    detector.onerror = () => finish(null, new Error('The browser detector could not start. Reload and try again in a recent desktop browser.'));
+    try { detector.postMessage({ file, badges }); }
+    catch (error) { finish(null, error); }
+  });
+}
+
+async function runOnServer(file, headers) {
+  const job = await api('/api/jobs', { method: 'POST', body: file, headers: { ...headers, 'Content-Type': 'video/mp4' } });
+  while (true) {
+    await new Promise(resolve => setTimeout(resolve, 1600));
+    const update = await api(`/api/jobs/${job.id}`, { headers });
+    if (update.state === 'failed') throw new Error(update.error);
+    if (update.state === 'done') {
+      const { frames_csv: frameCsv, coordinates_csv: xyCsv } = await api(`/api/jobs/${job.id}/results`, { headers });
+      return { frameCsv, xyCsv };
+    }
+    if (update.progress) notice(update.progress);
+  }
+}
+
+$('run-mode').addEventListener('change', switchRunMode);
+$('cancel-analysis').addEventListener('click', () => cancelBrowserRun?.());
+$('analyze-button').addEventListener('click', () => {
+  $('analyze-error').hidden = true;
+  switchRunMode();
+  $('analyze-dialog').showModal();
+});
 $('analyze-form').addEventListener('submit', async e => {
   e.preventDefault();
   const error = $('analyze-error'), file = $('analyze-file').files[0];
+  const hosted = $('run-mode').value === 'server';
   const key = $('access-key').value.trim();
   const headers = key ? { Authorization: `Bearer ${key}` } : {};
   const submit = e.target.querySelector('[type=submit]');
   submit.disabled = true; $('analyze-button').disabled = true; error.hidden = true;
   try {
-    if (file.size > analysis.max_bytes) throw new Error('The video exceeds the analysis upload limit.');
-    const job = await api('/api/jobs', { method: 'POST', body: file, headers: { ...headers, 'Content-Type': 'video/mp4' } });
-    $('analyze-dialog').close(); e.target.reset();
-    notice('Analysis in progress…');
-    while (true) {
-      await new Promise(resolve => setTimeout(resolve, 1600));
-      const update = await api(`/api/jobs/${job.id}`, { headers });
-      if (update.state === 'failed') throw new Error(update.error);
-      if (update.state === 'done') {
-        const { frames_csv: frameCsv, coordinates_csv: xyCsv } = await api(`/api/jobs/${job.id}/results`, { headers });
-        load({ frames: readResults(frameCsv, xyCsv), frameCsv, xyCsv }, file.name, file);
-        notice('Analysis complete. Frame and coordinate CSVs are ready.'); break;
+    if (!file?.size || file.size > (hosted ? analysis.max_bytes : browserMaxBytes)) throw new Error('Choose a non-empty MP4 up to 60 MiB.');
+    if (!hosted) {
+      const packFile = $('badge-file').files[0];
+      if (packFile) {
+        if (packFile.size > 50_000) throw new Error('Choose the small badge-pack JSON file.');
+        privateBadges = parseBadgePack(await packFile.text());
+        $('badge-state').textContent = 'Loaded for this page';
       }
-      if (update.progress) notice(update.progress);
+      if (!privateBadges) throw new Error('Add the badge-pack JSON for the staff badge you want to detect.');
     }
+    $('analyze-dialog').close(); e.target.reset();
+    notice(hosted ? 'Starting server analysis…' : 'Starting browser analysis…');
+    const { frameCsv, xyCsv } = await (hosted ? runOnServer(file, headers) : runInBrowser(file, privateBadges));
+    load({ frames: readResults(frameCsv, xyCsv), frameCsv, xyCsv }, file.name, file);
+    notice('Analysis complete. Frame and coordinate CSVs are ready.');
   } catch (problem) {
     if ($('analyze-dialog').open) { error.textContent = problem.message; error.hidden = false; }
     else notice(problem.message);
@@ -258,11 +313,7 @@ load(makeDemo(), 'Synthetic demo', null, true);
 try {
   analysis = await api('/api/availability');
   if (analysis.enabled) {
-    $('connection').textContent = analysis.requires_key ? 'Hosted detector' : 'Local detector';
-    $('analyze-button').hidden = false;
-    $('key-label').hidden = !analysis.requires_key; $('access-key').required = analysis.requires_key;
-    $('analyze-note').textContent = analysis.requires_key
-      ? 'The MP4 is sent to your configured analysis container. Download results after the run.'
-      : 'Run the Python detector on this machine. Download results after the run.';
+    $('mode-label').hidden = false;
+    $('run-mode').options[1].textContent = analysis.requires_key ? 'Cloudflare analysis server' : 'Local Python server';
   }
-} catch { /* Cloudflare Pages serves the browser viewer without a detector endpoint. */ }
+} catch { /* Static hosting uses on-device analysis. */ }

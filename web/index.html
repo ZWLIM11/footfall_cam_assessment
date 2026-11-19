@@ -12,7 +12,7 @@
   <header class="topbar">
     <div class="shell masthead">
       <div class="brand"><span class="brand-icon" aria-hidden="true"><i></i></span>FootfallCam</div>
-      <span class="connection" id="connection">Browser viewer</span>
+      <span class="connection" id="connection">On-device analysis</span>
     </div>
   </header>
   <main class="shell">
@@ -21,7 +21,8 @@
       <div class="actions">
         <button id="demo-button" class="secondary" type="button">Load demo</button>
         <button id="import-button" class="primary" type="button">Open results</button>
-        <button id="analyze-button" class="primary" type="button" hidden>Analyze video</button>
+        <button id="analyze-button" class="primary" type="button">Analyze video</button>
+        <button id="cancel-analysis" class="secondary" type="button" hidden>Cancel analysis</button>
       </div>
     </section>
     <div class="notice" id="activity" role="status" hidden></div>
@@ -74,8 +75,10 @@
   <dialog id="analyze-dialog" aria-labelledby="analyze-title">
     <form id="analyze-form">
       <div class="dialog-head"><h2 id="analyze-title">Analyze an MP4</h2><button type="button" class="secondary dismiss" aria-label="Close dialog">Close</button></div>
-      <p id="analyze-note"></p>
+      <p id="analyze-note">The detector runs in your browser. The MP4 and badge pack stay on this device.</p>
+      <label id="mode-label" hidden>Run detector on<select id="run-mode"><option value="browser">This device</option><option value="server">Configured server</option></select></label>
       <label>Source video<input type="file" id="analyze-file" accept="video/mp4,.mp4" required></label>
+      <label id="badge-label">Badge pack <small id="badge-state">Required for browser analysis</small><input type="file" id="badge-file" accept=".json,application/json"></label>
       <label id="key-label" hidden>Analysis access key<input type="password" id="access-key" autocomplete="off"></label>
       <p id="analyze-error" class="error" role="alert" hidden></p>
       <button type="submit" class="primary">Run detector</button>

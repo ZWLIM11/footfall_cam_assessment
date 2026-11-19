@@ -2,13 +2,19 @@
 
 A browser workspace for reviewing frame-by-frame staff badge detection and XY estimates from an overhead video. The Python detector uses badge matching, foreground candidates and motion-supported track links.
 
-## Deploy the browser viewer
+## Use on-device analysis
+
+Visit the [live Cloudflare workspace](https://footfall-cam-assessment.limziwei2004.workers.dev/) and select **Analyze video**. Pick an H.264 MP4 and the private badge-pack JSON. The page retains the badge pack until it is refreshed. The detector runs in a browser thread using a pinned [Pyodide WebAssembly runtime](https://pyodide.org/en/0.28.2/usage/webworker.html). There is no Python installation or Cloudflare Container required. Keep the tab open during analysis. The first run downloads the detector runtime and OpenCV. Processing time depends on your device and the clip.
+
+The browser keeps the MP4, badge pack and results on your device. It accepts up to 60 MiB, 4,500 frames and 1080p. When analysis finishes, inspect the timeline and export `staff_frames.csv` and `staff_coordinates.csv`. A badge pack can be prepared with `pack_badges.py` from the three PNG files in the assessment submission. Keep that file private.
+
+## Deploy the browser workspace
 
 The default `wrangler.jsonc` serves `web/` as static assets on Workers Free. For the Git-connected Worker `footfall-cam-assessment`, choose `main` as the production branch, keep the root directory at `/`, leave the build command empty, and use `npx wrangler deploy` as the deploy command. [Cloudflare Workers static assets](https://developers.cloudflare.com/workers/static-assets/get-started/)
 
 If you use **Cloudflare Pages**, connect this repository to a Pages project. Use the `main` production branch, no framework, an empty build command and `web` as the build output directory. [Cloudflare Pages Git integration](https://developers.cloudflare.com/pages/get-started/git-integration/) · [Static HTML setup](https://developers.cloudflare.com/pages/framework-guides/deploy-anything/)
 
-The workspace includes an interactive synthetic scene. Choose **Open results** to load `staff_frames.csv`, `staff_coordinates.csv` and the corresponding MP4 if available. Playback, the frame timeline and XY overlays operate inside the browser. Analysis on a new video uses the local Python server or the optional Cloudflare Container below.
+The workspace includes an interactive synthetic scene. Choose **Open results** to load `staff_frames.csv`, `staff_coordinates.csv` and the corresponding MP4 if available. Playback, the frame timeline, XY overlays and on-device analysis all operate inside the browser.
 
 To preview the same static UI locally, run `python -m http.server 8080 --bind 127.0.0.1 --directory web` and open `http://127.0.0.1:8080`.
 
@@ -23,7 +29,7 @@ $env:FOOTFALLCAM_TEMPLATE_DIR = 'C:\private\footfallcam-badges'
 .\.venv\Scripts\python.exe server.py
 ```
 
-Open `http://127.0.0.1:8080` and choose **Analyze video**. Select an MP4 up to 60 MiB, 4,500 frames and 1080p. When detection finishes, inspect the overlay and download both CSV exports. The server handles one job at a time, removes uploaded video after processing and keeps recent results temporarily.
+Open `http://127.0.0.1:8080` and choose **Analyze video** and **Local Python server**. Select an MP4 up to 60 MiB, 4,500 frames and 1080p. When detection finishes, inspect the overlay and download both CSV exports. The server handles one job at a time, removes uploaded video after processing and keeps recent results temporarily.
 
 For a direct Python run with an annotated video export, use the same badge folder.
 
@@ -45,7 +51,7 @@ npx wrangler secret put FOOTFALLCAM_ACCESS_KEY --config wrangler.container.jsonc
 .\.venv\Scripts\python.exe pack_badges.py $env:FOOTFALLCAM_TEMPLATE_DIR | npx wrangler secret put FOOTFALLCAM_TEMPLATES --config wrangler.container.jsonc
 ```
 
-Use the `workers.dev` URL printed by Wrangler. Once the container is ready and both secrets are configured, **Analyze video** appears. Enter the analysis key to run the same Python tracker from the browser. The site can still serve its viewer while the detector is warming up. Container results are temporary, so download the CSV exports after each run. [Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
+Use the `workers.dev` URL printed by Wrangler. Once the container is ready and both secrets are configured, **Analyze video** offers **Cloudflare analysis server**. Enter the analysis key to run the Python tracker on the container. Container results are temporary, so download the CSV exports after each run. [Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
 
 ## Assessment retest
 
@@ -64,3 +70,5 @@ The public repository contains source code, aggregate scores and the synthetic v
 npm test
 .\.venv\Scripts\python.exe -m unittest discover -s code\tests -v
 ```
+
+After editing the shared detector, run `npm run sync-engine` to refresh the Python files served under `web/_engine/`. `npm test` checks that the browser and CLI source stay in sync.

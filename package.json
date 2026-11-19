@@ -2,5 +2,8 @@
   "name": "footfallcam-workspace",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node --test web-tests.mjs" }
+  "scripts": {
+    "sync-engine": "node sync-browser-engine.mjs",
+    "test": "node sync-browser-engine.mjs --check && node --test web-tests.mjs"
+  }
 }

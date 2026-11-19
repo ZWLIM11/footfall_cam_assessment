@@ -39,6 +39,7 @@ def scan(args, cap, total, fps, width, height):
     frame_boxes = []
     low_light = {}
     history = MotionHistory(width, height, args.tracking == 'continuity')
+    progress_interval = getattr(args, 'progress_interval', 250)
     for frame_index in range(total):
         ok, frame = cap.read()
         if not ok:
@@ -69,7 +70,7 @@ def scan(args, cap, total, fps, width, height):
         frame_boxes.append(current)
         history.append(small, [candidate for candidate, _, _ in candidates])
         previous = small
-        if frame_index and frame_index % 250 == 0:
+        if frame_index and frame_index % progress_interval == 0:
             print(f'Scanned {frame_index}/{total} frames', flush=True)
     return frame_boxes, tracks, low_light, history
 
@@ -229,7 +230,7 @@ def run(args):
     print(json.dumps(summary, indent=2), flush=True)
 
 
-def main():
+def main(argv=None, *, progress_interval=250):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--input', required=True, type=Path)
     parser.add_argument('--output', default=Path('output'), type=Path)
@@ -248,7 +249,8 @@ def main():
                         help='Maximum duration for a continuous link supported by badges at both ends.')
     parser.add_argument('--tail-seconds', type=float, default=1.2,
                         help='Maximum seconds to follow the same foreground track from a single sighting.')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    args.progress_interval = progress_interval
     if not (args.analysis_width >= 120 and args.scan_stride >= 1 and 0 < args.badge_threshold <= 1 and
             0 < args.motion_threshold < 255 and 0 < args.window <= 1 and
             0 < args.bridge_seconds <= 30 and 0 <= args.tail_seconds <= 3):
