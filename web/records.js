@@ -43,7 +43,12 @@ export function readResults(frameCsv, xyCsv) {
       throw new Error('Frame indexes must be consecutive and timestamps must increase.');
     }
     lastTime = time;
-    return { time, status: row.staff_present === '1' ? 'present' : row.status === 'uncertain' ? 'uncertain' : 'empty', points: [] };
+    return {
+      time,
+      status: row.staff_present === '1' ? 'present' : row.status === 'uncertain' ? 'uncertain' : 'empty',
+      reviewed: row.review_status === 'reviewed' || row.status === 'reviewed_no_staff',
+      points: [],
+    };
   });
   if (!frames.length) throw new Error('The frames CSV is empty.');
   for (const row of pointsFile.rows) {
@@ -51,7 +56,11 @@ export function readResults(frameCsv, xyCsv) {
     if (!Number.isInteger(index) || frames[index]?.status !== 'present' || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0) {
       throw new Error('A coordinate row does not match the frame flags or contains invalid XY values.');
     }
-    frames[index].points.push({ id: row.staff_id, x, y, evidence: row.evidence || row.method || 'Imported coordinate' });
+    const badgeScore = number(row.badge_score);
+    frames[index].points.push({
+      id: row.staff_id, x, y, evidence: row.evidence || row.method || 'Imported coordinate',
+      badgeScore: Number.isFinite(badgeScore) ? badgeScore : undefined,
+    });
   }
   return frames;
 }

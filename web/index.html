@@ -26,7 +26,7 @@
   <main class="shell">
     <section class="intro">
       <h1>Detection workspace</h1>
-      <p>Review staff detections, jump to flagged frames, and export XY coordinates.</p>
+      <p>Inspect staff tracks, resolve uncertain frames, and export corrected XY coordinates.</p>
     </section>
     <div class="notice" id="activity" hidden>
       <div class="progress-copy"><span id="activity-text" role="status"></span><progress id="scan-progress" aria-label="Frames scanned" hidden></progress></div>
@@ -41,10 +41,11 @@
     <div class="workspace">
       <section class="panel player" aria-labelledby="preview-heading">
         <div class="panel-head"><div><h2 id="preview-heading">Frame preview</h2><p id="source-name">Synthetic demo</p></div><span class="badge" id="frame-status">—</span></div>
-        <div class="view">
+        <div class="view" id="frame-view">
           <video id="video" playsinline preload="metadata" hidden></video>
           <canvas id="preview" width="960" height="540" role="img" aria-label="Preview of the selected frame and staff positions"></canvas>
           <span id="preview-caption" class="scene-label">Illustrative overhead scene</span>
+          <span id="place-point" class="scene-label placement" hidden>Click the staff position</span>
         </div>
         <div class="controls">
           <button type="button" class="secondary play" id="play">Play</button>
@@ -56,16 +57,65 @@
           <div class="timeline-wrap"><canvas id="timeline" width="960" height="14" aria-hidden="true"></canvas><input type="range" id="seek" min="0" max="0" value="0"></div>
           <span id="time" class="timestamp">00:00.00</span>
         </div>
-        <div class="legend"><span><i class="present"></i>Staff flagged</span><span><i class="uncertain"></i>Uncertain</span><span><i class="empty"></i>No flag</span></div>
+        <div class="legend"><span><i class="present"></i>Staff flagged</span><span><i class="uncertain"></i>Uncertain</span><span><i class="empty"></i>No flag</span><span><i class="manual"></i>Reviewed XY</span></div>
       </section>
       <section class="panel events" aria-labelledby="results-heading">
         <div class="panel-head"><div><h2 id="results-heading">Frame details</h2><p id="frame-label">Select a frame</p></div></div>
         <div class="people" id="people"></div>
+        <div class="correction">
+          <div class="correction-actions" id="correction-actions">
+            <button class="secondary" type="button" id="edit-point">Edit XY</button>
+            <button class="secondary" type="button" id="mark-no-staff">Mark no staff</button>
+            <button class="text-button" type="button" id="undo-review" hidden>Undo frame edits</button>
+          </div>
+          <form id="point-editor" hidden>
+            <label id="point-target-label">Point<select id="point-target"></select></label>
+            <label id="point-id-label">Staff ID<input id="point-id" type="text" maxlength="50" autocomplete="off"></label>
+            <div class="xy-fields">
+              <label>X (px)<input id="point-x" type="number" min="0" step="any" required></label>
+              <label>Y (px)<input id="point-y" type="number" min="0" step="any" required></label>
+            </div>
+            <p id="point-hint">XY is measured from the top-left of the original frame.</p>
+            <p class="error" id="point-error" role="alert" hidden></p>
+            <div class="correction-actions"><button class="primary" type="submit">Save point</button><button class="secondary" id="cancel-point" type="button">Cancel edit</button></div>
+          </form>
+        </div>
+        <section class="review-queue" aria-labelledby="queue-title">
+          <div class="queue-head"><h3 id="queue-title">Review queue</h3><span id="queue-count" role="status"></span></div>
+          <div class="queue-actions">
+            <button type="button" id="show-queue" class="secondary">Show uncertain</button>
+            <button type="button" id="previous-uncertain" class="secondary step" aria-label="Previous uncertain frame">‹</button>
+            <button type="button" id="next-uncertain" class="secondary">Next uncertain <span aria-hidden="true">›</span></button>
+          </div>
+        </section>
         <div class="event-head"><h3>Timeline events</h3><label class="sr-only" for="event-filter">Filter timeline events</label><select id="event-filter"><option value="all">All events</option><option value="present">Staff flagged</option><option value="uncertain">Uncertain</option></select></div>
         <div id="event-list" class="event-list" aria-label="Timeline events"></div>
-        <div class="exports"><h3>Export results</h3><div><button type="button" id="export-frames" class="secondary">Frames CSV</button><button type="button" id="export-xy" class="secondary">Coordinates CSV</button></div></div>
+        <div class="exports">
+          <h3>Export results</h3><p id="export-note" role="status" hidden></p>
+          <div><button type="button" id="export-frames" class="secondary">Frames CSV</button><button type="button" id="export-xy" class="secondary">Coordinates CSV</button></div>
+        </div>
       </section>
     </div>
+    <section class="coverage panel" aria-labelledby="coverage-title">
+      <div class="coverage-head"><div><h2 id="coverage-title">Tracking coverage</h2><p id="coverage-summary"></p></div></div>
+      <dl class="coverage-counts">
+        <div><dt>Badge matches</dt><dd id="coverage-auto_badge">0</dd></div>
+        <div><dt>Linked track points</dt><dd id="coverage-auto_bridge">0</dd></div>
+        <div><dt>Track extensions</dt><dd id="coverage-auto_track">0</dd></div>
+        <div><dt>Gap estimates</dt><dd id="coverage-auto_bridge_gap">0</dd></div>
+        <div><dt>Manual points</dt><dd id="coverage-manual_review">0</dd></div>
+        <div hidden><dt>Other imported points</dt><dd id="coverage-other">0</dd></div>
+      </dl>
+      <details class="track-explanation">
+        <summary>How tracking works</summary>
+        <ol>
+          <li><strong>Find badge matches.</strong> The detector looks for moving regions in the overhead view and compares patches inside them with the badge pack. Strong, consistent matches anchor a staff track.</li>
+          <li><strong>Follow the motion.</strong> Optical flow estimates how pixels move from frame to frame. The detector links foreground regions whose position, motion, and size are consistent between badge sightings. It can also extend a track briefly from a single sighting.</li>
+          <li><strong>Flag the source of each point.</strong> Direct matches use the badge center. Linked points use the moving region’s center. Short gaps use an estimate between surrounding points. Crossings, occlusion, and people standing still can make a track uncertain.</li>
+        </ol>
+        <p>Coverage measures how many frames contain XY points. The counts above group the points by their source. A frame can contain more than one point.</p>
+      </details>
+    </section>
     <section class="benchmark panel" aria-labelledby="benchmark-title">
       <div><h2 id="benchmark-title">Assessment retest</h2><p>Python baseline vs. improved detector on the same 1,341 frames.</p></div>
       <dl><div><dt>Automatic flags</dt><dd>203 <span>→</span> 772</dd></div><div><dt>Within 60 px of reviewed center</dt><dd>151 <span>→</span> 698</dd></div></dl>

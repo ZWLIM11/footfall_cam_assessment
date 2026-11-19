@@ -6,7 +6,11 @@ A browser workspace for reviewing frame-by-frame staff badge detection and XY es
 
 Visit the [live Cloudflare workspace](https://footfall-cam-assessment.limziwei2004.workers.dev/) and select **Analyze video**. Pick an H.264 MP4 and the private badge-pack JSON. Leave **Remember this badge pack on this browser** checked to reuse it after a refresh or on your next visit. Use **Change** or **Forget** in the analysis dialog to replace or remove the saved pack. The detector runs in a browser thread using a pinned [Pyodide WebAssembly runtime](https://pyodide.org/en/0.28.2/usage/webworker.html). There is no Python installation or Cloudflare Container required. Keep the tab open during analysis. The first run downloads the detector runtime and OpenCV. Processing time depends on your device and the clip.
 
-The browser keeps the MP4, badge pack and results on your device. It accepts up to 60 MiB, 4,500 frames and 1080p. When analysis finishes, inspect the timeline and export `staff_frames.csv` and `staff_coordinates.csv`. A badge pack can be prepared with `pack_badges.py` from the three PNG files in the assessment submission. Keep that file private.
+The browser keeps the MP4, badge pack and results on your device. It accepts up to 60 MiB, 4,500 frames and 1080p. A badge pack can be prepared with `pack_badges.py` from the three PNG files in the assessment submission. Keep that file private.
+
+After analysis, use **Show uncertain** to filter the event list or **Next uncertain** to step through individual frames. Use **Place XY** or **Edit XY**, then click the video preview or enter original-frame pixel coordinates. **Mark no staff** resolves a frame with no visible staff. **Undo frame edits** restores the imported or automatic result for the current frame. Download both CSVs to keep the corrected pair. The reviewed CSVs label manually placed coordinates with `manual_review` and record the original detector status for edited frames. They can be opened again through **Open results** with the matching video.
+
+**Tracking coverage** reports the percentage of frames with XY points and the counts by point source. A direct match uses the badge center. Optical flow and foreground continuity connect strong sightings, and linked points use the foreground region center. Short gaps are interpolated, and a short extension can follow the same foreground region from a single sighting.
 
 ## Deploy the browser workspace
 
