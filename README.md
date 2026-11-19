@@ -4,7 +4,7 @@ A browser workspace for reviewing frame-by-frame staff badge detection and XY es
 
 ## Use on-device analysis
 
-Visit the [live Cloudflare workspace](https://footfall-cam-assessment.limziwei2004.workers.dev/) and select **Analyze video**. Pick an H.264 MP4 and the private badge-pack JSON. The page retains the badge pack until it is refreshed. The detector runs in a browser thread using a pinned [Pyodide WebAssembly runtime](https://pyodide.org/en/0.28.2/usage/webworker.html). There is no Python installation or Cloudflare Container required. Keep the tab open during analysis. The first run downloads the detector runtime and OpenCV. Processing time depends on your device and the clip.
+Visit the [live Cloudflare workspace](https://footfall-cam-assessment.limziwei2004.workers.dev/) and select **Analyze video**. Pick an H.264 MP4 and the private badge-pack JSON. Leave **Remember this badge pack on this browser** checked to reuse it after a refresh or on your next visit. Use **Change** or **Forget** in the analysis dialog to replace or remove the saved pack. The detector runs in a browser thread using a pinned [Pyodide WebAssembly runtime](https://pyodide.org/en/0.28.2/usage/webworker.html). There is no Python installation or Cloudflare Container required. Keep the tab open during analysis. The first run downloads the detector runtime and OpenCV. Processing time depends on your device and the clip.
 
 The browser keeps the MP4, badge pack and results on your device. It accepts up to 60 MiB, 4,500 frames and 1080p. When analysis finishes, inspect the timeline and export `staff_frames.csv` and `staff_coordinates.csv`. A badge pack can be prepared with `pack_badges.py` from the three PNG files in the assessment submission. Keep that file private.
 

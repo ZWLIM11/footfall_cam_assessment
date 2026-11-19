@@ -1,16 +1,17 @@
 import { readResults, eventsFor, frameAt, makeDemo } from './records.js';
-import { parseBadgePack } from './badge-pack.js';
+import { forgetSavedBadgePack, loadSavedBadgePack, parseBadgePack, rememberBadgePack } from './badge-pack.js';
 
 const $ = id => document.getElementById(id);
 const video = $('video'), preview = $('preview'), brush = preview.getContext('2d');
 const timeline = $('timeline'), tracks = timeline.getContext('2d');
-const colors = { present: '#258861', uncertain: '#d49748', empty: '#d8e3df' };
+const colors = { present: '#21856f', uncertain: '#d89539', empty: '#dce5e3' };
 const statusText = { present: 'Staff flagged', uncertain: 'Uncertain', empty: 'No flag' };
 const evidenceText = { auto_badge: 'Badge evidence', auto_bridge: 'Linked track', auto_bridge_gap: 'Short gap estimate', auto_track: 'Track extension' };
 const fmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
 let dataset, index = 0, objectUrl, playing = false, animation = 0, started, startedAt;
 let analysis = { enabled: false, requires_key: false };
-let privateBadges, cancelBrowserRun;
+let privateBadges = loadSavedBadgePack(), badgesRemembered = Boolean(privateBadges);
+let cancelBrowserRun;
 const browserMaxBytes = 60 * 1024 * 1024;
 
 function stamp(seconds) {
@@ -25,7 +26,16 @@ function construct(tag, value, className) {
   return el;
 }
 
-function notice(message = '') { $('activity').hidden = !message; $('activity').textContent = message; }
+function notice(message = '') {
+  $('activity').hidden = !message;
+  $('activity-text').textContent = message;
+  const scan = /^Scanned (\d+)\/(\d+) frames$/.exec(message);
+  $('scan-progress').hidden = !scan;
+  if (scan) {
+    $('scan-progress').max = Number(scan[2]);
+    $('scan-progress').value = Number(scan[1]);
+  }
+}
 
 function drawScene(w, h) {
   brush.fillStyle = '#15332a'; brush.fillRect(0, 0, w, h);
@@ -89,11 +99,11 @@ function renderEvents() {
   list.replaceChildren();
   for (const event of dataset.events) {
     if (filter !== 'all' && filter !== event.status) continue;
-    const button = construct('button', '', 'event'); button.type = 'button';
+    const button = construct('button', '', `event ${event.status}`); button.type = 'button';
     button.dataset.start = event.start; button.dataset.end = event.end;
     const group = construct('span', '');
     group.append(construct('b', statusText[event.status]), document.createElement('br'),
-      construct('small', `${event.start}–${event.end} · ${event.end - event.start + 1} frames`));
+      construct('small', `${event.start}–${event.end} · ${event.end - event.start + 1} ${event.end === event.start ? 'frame' : 'frames'}`));
     button.append(group, construct('span', stamp(dataset.frames[event.start].time), 'mono'));
     list.append(button);
   }
@@ -113,6 +123,8 @@ function showFrame(next, seekVideo = false) {
   const frame = dataset.frames[index];
   if (seekVideo && !video.hidden && video.readyState) video.currentTime = Math.min(frame.time, video.duration);
   $('seek').value = index;
+  $('previous-frame').disabled = index === 0;
+  $('next-frame').disabled = index === dataset.frames.length - 1;
   $('seek').setAttribute('aria-valuetext', `Frame ${index}, ${stamp(frame.time)}`);
   $('time').textContent = stamp(frame.time);
   $('frame-label').textContent = `Frame ${index} of ${dataset.frames.length - 1} · ${stamp(frame.time)}`;
@@ -158,9 +170,10 @@ function load(data, source, file, demo = false) {
   $('uncertain').textContent = fmt.format(data.frames.filter(f => f.status === 'uncertain').length);
   $('intervals').textContent = fmt.format(dataset.events.filter(e => e.status === 'present').length);
   $('seek').max = data.frames.length - 1;
-  $('event-filter').value = 'all';
+  const firstFlag = dataset.events.find(event => event.status === 'present');
+  $('event-filter').value = firstFlag ? 'present' : 'all';
   $('event-list').scrollTop = 0;
-  drawTimeline(); renderEvents(); showFrame(demo ? 38 : 0);
+  drawTimeline(); renderEvents(); showFrame(demo ? 38 : firstFlag?.start ?? 0, true);
 }
 
 function tick(now) {
@@ -185,7 +198,10 @@ $('event-filter').addEventListener('change', renderEvents);
 $('event-list').addEventListener('click', e => {
   const button = e.target.closest('button'); if (button) { pause(); showFrame(+button.dataset.start, true); }
 });
-$('seek').addEventListener('input', e => { pause(); showFrame(+e.target.value, true); });
+function seekFrame(frame) { pause(); showFrame(frame, true); }
+$('seek').addEventListener('input', e => seekFrame(+e.target.value));
+$('previous-frame').addEventListener('click', () => seekFrame(index - 1));
+$('next-frame').addEventListener('click', () => seekFrame(index + 1));
 $('export-frames').addEventListener('click', () => saveCsv(dataset.frameCsv, 'staff_frames.csv'));
 $('export-xy').addEventListener('click', () => saveCsv(dataset.xyCsv, 'staff_coordinates.csv'));
 video.addEventListener('loadedmetadata', () => {
@@ -230,12 +246,20 @@ async function api(path, request) {
 
 function switchRunMode() {
   const hosted = $('run-mode').value === 'server';
-  $('badge-label').hidden = hosted;
+  $('badge-settings').hidden = hosted;
   $('key-label').hidden = !hosted || !analysis.requires_key;
   $('access-key').required = hosted && analysis.requires_key;
   $('analyze-note').textContent = hosted
     ? analysis.requires_key ? 'Your MP4 is sent to the configured analysis container.' : 'Run the Python detector on this machine.'
-    : 'The detector runs in your browser. The MP4 and badge pack stay on this device.';
+    : 'Choose an MP4 to scan on this device.';
+}
+
+function renderBadgeStatus() {
+  $('badge-state').textContent = badgesRemembered ? 'Saved in this browser' : privateBadges ? 'Available until reload' : 'Required for the first run';
+  $('badge-summary').textContent = badgesRemembered ? 'Badge pack saved' : privateBadges ? 'Badge pack loaded' : 'No badge pack saved';
+  $('saved-badge-actions').hidden = !privateBadges;
+  $('badge-picker').hidden = Boolean(privateBadges);
+  $('badge-file').required = !privateBadges && $('run-mode').value !== 'server';
 }
 
 function runInBrowser(file, badges) {
@@ -272,11 +296,31 @@ async function runOnServer(file, headers) {
   }
 }
 
-$('run-mode').addEventListener('change', switchRunMode);
+$('run-mode').addEventListener('change', () => { switchRunMode(); renderBadgeStatus(); });
+$('change-badge').addEventListener('click', () => {
+  $('badge-picker').hidden = false;
+  $('badge-file').focus();
+});
+$('forget-badge').addEventListener('click', () => {
+  try {
+    forgetSavedBadgePack();
+    privateBadges = undefined;
+    badgesRemembered = false;
+    $('badge-file').value = '';
+    $('remember-badge').checked = true;
+    renderBadgeStatus();
+    $('badge-file').focus();
+  } catch {
+    $('analyze-error').textContent = 'Browser storage is unavailable. You can clear the badge pack through this site’s browser settings.';
+    $('analyze-error').hidden = false;
+  }
+});
+$('analyze-dialog').addEventListener('close', () => $('analyze-form').reset());
 $('cancel-analysis').addEventListener('click', () => cancelBrowserRun?.());
 $('analyze-button').addEventListener('click', () => {
   $('analyze-error').hidden = true;
   switchRunMode();
+  renderBadgeStatus();
   $('analyze-dialog').showModal();
 });
 $('analyze-form').addEventListener('submit', async e => {
@@ -287,14 +331,25 @@ $('analyze-form').addEventListener('submit', async e => {
   const headers = key ? { Authorization: `Bearer ${key}` } : {};
   const submit = e.target.querySelector('[type=submit]');
   submit.disabled = true; $('analyze-button').disabled = true; error.hidden = true;
+  let storageNote = '';
   try {
     if (!file?.size || file.size > (hosted ? analysis.max_bytes : browserMaxBytes)) throw new Error('Choose a non-empty MP4 up to 60 MiB.');
     if (!hosted) {
       const packFile = $('badge-file').files[0];
       if (packFile) {
         if (packFile.size > 50_000) throw new Error('Choose the small badge-pack JSON file.');
-        privateBadges = parseBadgePack(await packFile.text());
-        $('badge-state').textContent = 'Loaded for this page';
+        const badges = parseBadgePack(await packFile.text());
+        const remember = $('remember-badge').checked;
+        try {
+          if (remember) rememberBadgePack(badges);
+          else if (badgesRemembered) forgetSavedBadgePack();
+          badgesRemembered = remember;
+        } catch {
+          badgesRemembered = false;
+          storageNote = 'Browser storage was unavailable. This badge pack is loaded for this page.';
+        }
+        privateBadges = badges;
+        renderBadgeStatus();
       }
       if (!privateBadges) throw new Error('Add the badge-pack JSON for the staff badge you want to detect.');
     }
@@ -302,13 +357,14 @@ $('analyze-form').addEventListener('submit', async e => {
     notice(hosted ? 'Starting server analysis…' : 'Starting browser analysis…');
     const { frameCsv, xyCsv } = await (hosted ? runOnServer(file, headers) : runInBrowser(file, privateBadges));
     load({ frames: readResults(frameCsv, xyCsv), frameCsv, xyCsv }, file.name, file);
-    notice('Analysis complete. Frame and coordinate CSVs are ready.');
+    notice(`Analysis complete. Frame and coordinate CSVs are ready.${storageNote ? ` ${storageNote}` : ''}`);
   } catch (problem) {
     if ($('analyze-dialog').open) { error.textContent = problem.message; error.hidden = false; }
     else notice(problem.message);
   } finally { submit.disabled = false; $('analyze-button').disabled = false; }
 });
 
+renderBadgeStatus();
 load(makeDemo(), 'Synthetic demo', null, true);
 try {
   analysis = await api('/api/availability');

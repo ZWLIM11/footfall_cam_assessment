@@ -1,4 +1,5 @@
 const names = ['front.png', 'dark.png', 'light.png'];
+const storageKey = 'footfallcam.badge-pack.v1';
 
 export function parseBadgePack(text) {
   if (text.length > 50_000) throw new Error('The badge pack is too large. Use the three small PNG badge crops.');
@@ -20,4 +21,20 @@ export function parseBadgePack(text) {
     } catch { throw new Error(`The badge pack needs a valid small PNG named ${name}.`); }
   }
   return badges;
+}
+
+export function loadSavedBadgePack(storage) {
+  try {
+    const saved = (storage ?? globalThis.localStorage).getItem(storageKey);
+    return saved ? parseBadgePack(saved) : undefined;
+  } catch { return undefined; }
+}
+
+export function rememberBadgePack(badges, storage) {
+  const crops = Object.fromEntries(names.map(name => [name, btoa(String.fromCharCode(...badges[name]))]));
+  (storage ?? globalThis.localStorage).setItem(storageKey, JSON.stringify(crops));
+}
+
+export function forgetSavedBadgePack(storage) {
+  (storage ?? globalThis.localStorage).removeItem(storageKey);
 }

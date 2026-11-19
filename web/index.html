@@ -9,23 +9,29 @@
   <script type="module" src="./app.js"></script>
 </head>
 <body>
-  <header class="topbar">
-    <div class="shell masthead">
-      <div class="brand"><span class="brand-icon" aria-hidden="true"><i></i></span>FootfallCam</div>
-      <span class="connection" id="connection">On-device analysis</span>
+  <header class="sidebar">
+    <div class="sidebar-inner">
+      <div class="brand"><span class="brand-icon" aria-hidden="true"><i></i></span><span>FootfallCam<small>Staff detection</small></span></div>
+      <nav class="actions" aria-label="Workspace actions">
+        <button id="analyze-button" class="primary" type="button"><span class="action-symbol" aria-hidden="true">+</span>Analyze video</button>
+        <button id="import-button" class="secondary" type="button">Open results</button>
+        <button id="demo-button" class="secondary" type="button">Load demo</button>
+      </nav>
+      <div class="device">
+        <span class="connection">On-device analysis</span>
+        <span id="badge-summary">No badge pack saved</span>
+      </div>
     </div>
   </header>
   <main class="shell">
     <section class="intro">
-      <div><h1>Detection workspace</h1><p>Inspect overhead video and track staff by frame.</p></div>
-      <div class="actions">
-        <button id="demo-button" class="secondary" type="button">Load demo</button>
-        <button id="import-button" class="primary" type="button">Open results</button>
-        <button id="analyze-button" class="primary" type="button">Analyze video</button>
-        <button id="cancel-analysis" class="secondary" type="button" hidden>Cancel analysis</button>
-      </div>
+      <h1>Detection workspace</h1>
+      <p>Review staff detections, jump to flagged frames, and export XY coordinates.</p>
     </section>
-    <div class="notice" id="activity" role="status" hidden></div>
+    <div class="notice" id="activity" hidden>
+      <div class="progress-copy"><span id="activity-text" role="status"></span><progress id="scan-progress" aria-label="Frames scanned" hidden></progress></div>
+      <button id="cancel-analysis" class="secondary" type="button" hidden>Cancel analysis</button>
+    </div>
     <section class="stats" aria-label="Current results">
       <article><span>Total frames</span><strong id="total">—</strong></article>
       <article><span>Staff flagged</span><strong id="positives" class="green-text">—</strong></article>
@@ -42,6 +48,10 @@
         </div>
         <div class="controls">
           <button type="button" class="secondary play" id="play">Play</button>
+          <div class="steps">
+            <button type="button" class="secondary step" id="previous-frame" aria-label="Previous frame">‹</button>
+            <button type="button" class="secondary step" id="next-frame" aria-label="Next frame">›</button>
+          </div>
           <label class="sr-only" for="seek">Select frame</label>
           <div class="timeline-wrap"><canvas id="timeline" width="960" height="14" aria-hidden="true"></canvas><input type="range" id="seek" min="0" max="0" value="0"></div>
           <span id="time" class="timestamp">00:00.00</span>
@@ -53,12 +63,12 @@
         <div class="people" id="people"></div>
         <div class="event-head"><h3>Timeline events</h3><label class="sr-only" for="event-filter">Filter timeline events</label><select id="event-filter"><option value="all">All events</option><option value="present">Staff flagged</option><option value="uncertain">Uncertain</option></select></div>
         <div id="event-list" class="event-list" aria-label="Timeline events"></div>
-        <div class="exports"><button type="button" id="export-frames" class="secondary">Frames CSV</button><button type="button" id="export-xy" class="secondary">Coordinates CSV</button></div>
+        <div class="exports"><h3>Export results</h3><div><button type="button" id="export-frames" class="secondary">Frames CSV</button><button type="button" id="export-xy" class="secondary">Coordinates CSV</button></div></div>
       </section>
     </div>
     <section class="benchmark panel" aria-labelledby="benchmark-title">
-      <div><h2 id="benchmark-title">Assessment retest</h2><p>Same 1,341-frame clip. Visual review was used afterward to score XY.</p></div>
-      <dl><div><dt>Automatic flags</dt><dd>203 <span>to</span> 772</dd></div><div><dt>Within 60 px of reviewed center</dt><dd>151 <span>to</span> 698</dd></div></dl>
+      <div><h2 id="benchmark-title">Assessment retest</h2><p>Python baseline vs. improved detector on the same 1,341 frames.</p></div>
+      <dl><div><dt>Automatic flags</dt><dd>203 <span>→</span> 772</dd></div><div><dt>Within 60 px of reviewed center</dt><dd>151 <span>→</span> 698</dd></div></dl>
     </section>
   </main>
   <dialog id="import-dialog" aria-labelledby="import-title">
@@ -75,13 +85,24 @@
   <dialog id="analyze-dialog" aria-labelledby="analyze-title">
     <form id="analyze-form">
       <div class="dialog-head"><h2 id="analyze-title">Analyze an MP4</h2><button type="button" class="secondary dismiss" aria-label="Close dialog">Close</button></div>
-      <p id="analyze-note">The detector runs in your browser. The MP4 and badge pack stay on this device.</p>
+      <p id="analyze-note">Choose an MP4 to scan on this device.</p>
       <label id="mode-label" hidden>Run detector on<select id="run-mode"><option value="browser">This device</option><option value="server">Configured server</option></select></label>
-      <label>Source video<input type="file" id="analyze-file" accept="video/mp4,.mp4" required></label>
-      <label id="badge-label">Badge pack <small id="badge-state">Required for browser analysis</small><input type="file" id="badge-file" accept=".json,application/json"></label>
+      <label>Source video <small>H.264 MP4 recommended</small><input type="file" id="analyze-file" accept="video/mp4,.mp4" required></label>
+      <fieldset id="badge-settings">
+        <legend>Badge pack</legend>
+        <div class="badge-settings-head">
+          <span id="badge-state">Required for the first run</span>
+          <div id="saved-badge-actions" hidden><button class="text-button" type="button" id="change-badge">Change</button><button class="text-button" type="button" id="forget-badge">Forget</button></div>
+        </div>
+        <div id="badge-picker">
+          <label class="sr-only" for="badge-file">Badge pack JSON</label>
+          <input type="file" id="badge-file" accept=".json,application/json">
+          <label class="remember"><input type="checkbox" id="remember-badge" checked> Remember this badge pack on this browser</label>
+        </div>
+      </fieldset>
       <label id="key-label" hidden>Analysis access key<input type="password" id="access-key" autocomplete="off"></label>
       <p id="analyze-error" class="error" role="alert" hidden></p>
-      <button type="submit" class="primary">Run detector</button>
+      <button type="submit" class="primary dialog-submit">Run detector</button>
     </form>
   </dialog>
 </body>
