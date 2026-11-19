@@ -1,0 +1,14 @@
+__pycache__/
+.venv/
+.wrangler/
+.dev.vars*
+.env*
+node_modules/
+*.mp4
+*.webm
+*.avi
+*.pdf
+code/assets/
+code/reviews/
+results/
+output*/

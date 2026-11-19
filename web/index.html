@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Inspect staff detection, frame timelines and XY coordinates from fixed overhead footage.">
+  <title>FootfallCam · Detection workspace</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell masthead">
+      <div class="brand"><span class="brand-icon" aria-hidden="true"><i></i></span>FootfallCam</div>
+      <span class="connection" id="connection">Browser viewer</span>
+    </div>
+  </header>
+  <main class="shell">
+    <section class="intro">
+      <div><h1>Detection workspace</h1><p>Inspect overhead video and track staff by frame.</p></div>
+      <div class="actions">
+        <button id="demo-button" class="secondary" type="button">Load demo</button>
+        <button id="import-button" class="primary" type="button">Open results</button>
+        <button id="analyze-button" class="primary" type="button" hidden>Analyze video</button>
+      </div>
+    </section>
+    <div class="notice" id="activity" role="status" hidden></div>
+    <section class="stats" aria-label="Current results">
+      <article><span>Total frames</span><strong id="total">—</strong></article>
+      <article><span>Staff flagged</span><strong id="positives" class="green-text">—</strong></article>
+      <article><span>Uncertain frames</span><strong id="uncertain">—</strong></article>
+      <article><span>Staff intervals</span><strong id="intervals">—</strong></article>
+    </section>
+    <div class="workspace">
+      <section class="panel player" aria-labelledby="preview-heading">
+        <div class="panel-head"><div><h2 id="preview-heading">Frame preview</h2><p id="source-name">Synthetic demo</p></div><span class="badge" id="frame-status">—</span></div>
+        <div class="view">
+          <video id="video" playsinline preload="metadata" hidden></video>
+          <canvas id="preview" width="960" height="540" role="img" aria-label="Preview of the selected frame and staff positions"></canvas>
+          <span id="preview-caption" class="scene-label">Illustrative overhead scene</span>
+        </div>
+        <div class="controls">
+          <button type="button" class="secondary play" id="play">Play</button>
+          <label class="sr-only" for="seek">Select frame</label>
+          <div class="timeline-wrap"><canvas id="timeline" width="960" height="14" aria-hidden="true"></canvas><input type="range" id="seek" min="0" max="0" value="0"></div>
+          <span id="time" class="timestamp">00:00.00</span>
+        </div>
+        <div class="legend"><span><i class="present"></i>Staff flagged</span><span><i class="uncertain"></i>Uncertain</span><span><i class="empty"></i>No flag</span></div>
+      </section>
+      <section class="panel events" aria-labelledby="results-heading">
+        <div class="panel-head"><div><h2 id="results-heading">Frame details</h2><p id="frame-label">Select a frame</p></div></div>
+        <div class="people" id="people"></div>
+        <div class="event-head"><h3>Timeline events</h3><label class="sr-only" for="event-filter">Filter timeline events</label><select id="event-filter"><option value="all">All events</option><option value="present">Staff flagged</option><option value="uncertain">Uncertain</option></select></div>
+        <div id="event-list" class="event-list" aria-label="Timeline events"></div>
+        <div class="exports"><button type="button" id="export-frames" class="secondary">Frames CSV</button><button type="button" id="export-xy" class="secondary">Coordinates CSV</button></div>
+      </section>
+    </div>
+    <section class="benchmark panel" aria-labelledby="benchmark-title">
+      <div><h2 id="benchmark-title">Assessment retest</h2><p>Same 1,341-frame clip. Visual review was used afterward to score XY.</p></div>
+      <dl><div><dt>Automatic flags</dt><dd>203 <span>to</span> 772</dd></div><div><dt>Within 60 px of reviewed center</dt><dd>151 <span>to</span> 698</dd></div></dl>
+    </section>
+  </main>
+  <dialog id="import-dialog" aria-labelledby="import-title">
+    <form id="import-form">
+      <div class="dialog-head"><h2 id="import-title">Open local results</h2><button type="button" class="secondary dismiss" aria-label="Close dialog">Close</button></div>
+      <p>Choose the detector’s CSV exports and, optionally, the corresponding video. These files stay in your browser.</p>
+      <label>Staff frames CSV<input type="file" id="frames-file" accept=".csv,text/csv" required></label>
+      <label>Staff coordinates CSV<input type="file" id="xy-file" accept=".csv,text/csv" required></label>
+      <label>Source video <small>Optional</small><input type="file" id="video-file" accept="video/mp4,video/webm,.mp4,.webm"></label>
+      <p id="import-error" class="error" role="alert" hidden></p>
+      <button type="submit" class="primary">Open workspace</button>
+    </form>
+  </dialog>
+  <dialog id="analyze-dialog" aria-labelledby="analyze-title">
+    <form id="analyze-form">
+      <div class="dialog-head"><h2 id="analyze-title">Analyze an MP4</h2><button type="button" class="secondary dismiss" aria-label="Close dialog">Close</button></div>
+      <p id="analyze-note"></p>
+      <label>Source video<input type="file" id="analyze-file" accept="video/mp4,.mp4" required></label>
+      <label id="key-label" hidden>Analysis access key<input type="password" id="access-key" autocomplete="off"></label>
+      <p id="analyze-error" class="error" role="alert" hidden></p>
+      <button type="submit" class="primary">Run detector</button>
+    </form>
+  </dialog>
+</body>
+</html>

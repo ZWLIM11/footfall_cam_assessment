@@ -1,0 +1,6 @@
+{
+  "name": "footfallcam-workspace",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test web-tests.mjs" }
+}

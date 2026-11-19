@@ -1,0 +1,7 @@
+*
+!server.py
+!code/
+code/*
+!code/*.py
+!web/
+!web/**
