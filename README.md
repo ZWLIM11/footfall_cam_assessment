@@ -2,11 +2,13 @@
 
 A browser workspace for reviewing frame-by-frame staff badge detection and XY estimates from an overhead video. The Python detector uses badge matching, foreground candidates and motion-supported track links.
 
-## Try the UI on Cloudflare Pages
+## Deploy the browser viewer
 
-In **Workers & Pages**, create a **Pages** project with Git integration and connect this repository. Use the `main` production branch, no framework, an empty build command and `web` as the build output directory. [Cloudflare Pages Git integration](https://developers.cloudflare.com/pages/get-started/git-integration/) · [Static HTML setup](https://developers.cloudflare.com/pages/framework-guides/deploy-anything/)
+The default `wrangler.jsonc` serves `web/` as static assets on Workers Free. For the Git-connected Worker `footfall-cam-assessment`, choose `main` as the production branch, keep the root directory at `/`, leave the build command empty, and use `npx wrangler deploy` as the deploy command. [Cloudflare Workers static assets](https://developers.cloudflare.com/workers/static-assets/get-started/)
 
-The Pages workspace includes an interactive synthetic scene. Choose **Open results** to load `staff_frames.csv`, `staff_coordinates.csv` and the corresponding MP4 if available. Playback, the frame timeline and XY overlays operate inside the browser. Analysis on a new video uses the local Python server or the optional Cloudflare Container below.
+If you use **Cloudflare Pages**, connect this repository to a Pages project. Use the `main` production branch, no framework, an empty build command and `web` as the build output directory. [Cloudflare Pages Git integration](https://developers.cloudflare.com/pages/get-started/git-integration/) · [Static HTML setup](https://developers.cloudflare.com/pages/framework-guides/deploy-anything/)
+
+The workspace includes an interactive synthetic scene. Choose **Open results** to load `staff_frames.csv`, `staff_coordinates.csv` and the corresponding MP4 if available. Playback, the frame timeline and XY overlays operate inside the browser. Analysis on a new video uses the local Python server or the optional Cloudflare Container below.
 
 To preview the same static UI locally, run `python -m http.server 8080 --bind 127.0.0.1 --directory web` and open `http://127.0.0.1:8080`.
 
@@ -34,13 +36,13 @@ For a direct Python run with an annotated video export, use the same badge folde
 
 The Worker serves the UI from `web/` and forwards authenticated video analysis jobs to the Linux Python container in `Dockerfile`. This route uses **Workers Paid** and a running Docker-compatible engine for local deployment. [Cloudflare Containers](https://developers.cloudflare.com/containers/get-started/) · [Container pricing](https://developers.cloudflare.com/containers/platform/pricing/)
 
-From the repo root, use the Wrangler CLI to log in and deploy the included configuration. Set a strong private analysis key and send the badge crops directly to the Worker secret over stdin.
+From the repo root, choose `wrangler.container.jsonc` for the paid deployment. If you deploy from Git with Workers Builds, set its deploy command to `npx wrangler deploy --config wrangler.container.jsonc` so future builds use that configuration. Set a strong private analysis key and send the badge crops directly to the Worker secret over stdin.
 
 ```powershell
 npx wrangler login
-npx wrangler deploy
-npx wrangler secret put FOOTFALLCAM_ACCESS_KEY
-.\.venv\Scripts\python.exe pack_badges.py $env:FOOTFALLCAM_TEMPLATE_DIR | npx wrangler secret put FOOTFALLCAM_TEMPLATES
+npx wrangler deploy --config wrangler.container.jsonc
+npx wrangler secret put FOOTFALLCAM_ACCESS_KEY --config wrangler.container.jsonc
+.\.venv\Scripts\python.exe pack_badges.py $env:FOOTFALLCAM_TEMPLATE_DIR | npx wrangler secret put FOOTFALLCAM_TEMPLATES --config wrangler.container.jsonc
 ```
 
 Use the `workers.dev` URL printed by Wrangler. Once the container is ready and both secrets are configured, **Analyze video** appears. Enter the analysis key to run the same Python tracker from the browser. The site can still serve its viewer while the detector is warming up. Container results are temporary, so download the CSV exports after each run. [Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
