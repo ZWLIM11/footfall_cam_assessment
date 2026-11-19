@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "footfallcam-workspace",
+  "name": "footfall-cam-assessment",
   "main": "worker.js",
   "compatibility_date": "2026-11-19",
   "assets": { "directory": "./web", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
@@ -8,8 +8,7 @@
     {
       "class_name": "Detector",
       "scheduling_policy": "durable_object",
-      "images": { "base": { "dockerfile": "./Dockerfile" } },
-      "max_instances": 1
+      "images": { "base": { "dockerfile": "./Dockerfile" } }
     }
   ],
   "durable_objects": { "bindings": [{ "name": "DETECTOR", "class_name": "Detector" }] },
