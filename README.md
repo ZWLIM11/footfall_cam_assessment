@@ -12,6 +12,12 @@ After analysis, use **Show uncertain** to filter the event list or **Next uncert
 
 **Tracking coverage** reports the percentage of frames with XY points and the counts by point source. A direct match uses the badge center. Optical flow and foreground continuity connect strong sightings, and linked points use the foreground region center. Short gaps are interpolated, and a short extension can follow the same foreground region from a single sighting.
 
+## Benchmark a detector run
+
+Load the original automatic results and choose **Benchmark**. Download the label template and fill in `staff_present` with 1 for verified staff and 0 for verified no staff. Leave unchecked frames blank. You can add one verified `x_center,y_center` pair in original pixels per staff frame, or use the reviewed CSV pair as reference. In a reviewed pair only manually reviewed frames and coordinates count. Compare labels from the same clip using zero-based frame indexes.
+
+The benchmark reports precision, recall, F1, false flags, misses, and median XY error on paired points. It counts uncertain detector frames as unflagged. Precision and F1 require both verified staff and no-staff frames. The within-60-px denominator includes every reference center, including missed frames. **Download benchmark CSV** saves the result for each verified frame. Use separately labeled clips to evaluate how well the detector works on new footage.
+
 ## Deploy the browser workspace
 
 The default `wrangler.jsonc` serves `web/` as static assets on Workers Free. For the Git-connected Worker `footfall-cam-assessment`, choose `main` as the production branch, keep the root directory at `/`, leave the build command empty, and use `npx wrangler deploy` as the deploy command. [Cloudflare Workers static assets](https://developers.cloudflare.com/workers/static-assets/get-started/)

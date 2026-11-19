@@ -3,6 +3,7 @@ import test from 'node:test';
 import { eventsFor, frameAt, makeDemo, readCsv, readResults } from './web/records.js';
 import { forgetSavedBadgePack, loadSavedBadgePack, parseBadgePack, rememberBadgePack } from './web/badge-pack.js';
 import { coverageFor, pointAtPointer, reviewedExports, setReviewPoint } from './web/review.js';
+import { benchmarkCsv, labelTemplate, measureBenchmark, referenceLabels } from './web/benchmark.js';
 
 test('imports demo exports and builds separate staff and uncertain intervals', () => {
   const { frameCsv, xyCsv } = makeDemo();
@@ -109,4 +110,43 @@ test('rejects duplicate IDs and out-of-frame point edits', () => {
   assert.throws(() => setReviewPoint(frame, undefined, 'auto_1', 7, 8, 100, 80), /already on the frame/);
   assert.throws(() => setReviewPoint(frame, undefined, '=A1', 7, 8, 100, 80), /staff ID/);
   assert.throws(() => setReviewPoint(frame, 0, 'auto_1', 100, 17, 100, 80), /inside the frame/);
+});
+
+test('benchmarks only labeled frames and includes missed centers in XY coverage', () => {
+  const frames = [
+    { time: 0, status: 'present', points: [{ x: 10, y: 10 }, { x: 80, y: 80 }] },
+    { time: .04, status: 'uncertain', points: [] },
+    { time: .08, status: 'present', points: [{ x: 10, y: 10 }] },
+    { time: .12, status: 'empty', points: [] },
+    { time: .16, status: 'present', points: [{ x: 90, y: 90 }] },
+  ];
+  const inputs = 'frame_index,time_seconds,staff_present,x_center,y_center\n0,0,1,13,14\n1,.04,1,10,10\n2,.08,0,,\n3,.12,0,,\n4,.16,,,\n';
+  const result = measureBenchmark(frames, referenceLabels(inputs, undefined, frames));
+  assert.deepEqual(result.counts, { tp: 1, tn: 1, fp: 1, fn: 1 });
+  assert.equal(result.labeled, 4);
+  assert.equal(result.total, 5);
+  assert.equal(result.uncertain, 1);
+  assert.equal(result.precision, .5);
+  assert.equal(result.recall, .5);
+  assert.equal(result.f1, .5);
+  assert.equal(result.medianError, 5);
+  assert.equal(result.within60, 1);
+  assert.equal(result.labeledXY, 2);
+  assert.equal(result.pairedXY, 1);
+  assert.match(benchmarkCsv(result.rows), /1,0\.040000,1,uncertain,fn,/);
+  assert.equal(readCsv(labelTemplate(frames)).rows.length, 5);
+});
+
+test('reads only verified review rows and withholds precision on a staff-only reference', () => {
+  const { frameCsv, xyCsv, frames } = makeDemo();
+  assert.throws(() => referenceLabels(frameCsv, xyCsv, frames), /No verified frames/);
+  const edits = new Map([[38, setReviewPoint(frames[38], 0, 'demo_1', 499, 339, 960, 540)]]);
+  const exported = reviewedExports(frameCsv, xyCsv, edits);
+  const labels = referenceLabels(exported.frameCsv, exported.xyCsv, frames);
+  assert.deepEqual([...labels], [[38, { present: true, center: { x: 499, y: 339 } }]]);
+  const result = measureBenchmark(frames, labels);
+  assert.equal(result.precision, null);
+  assert.equal(result.f1, null);
+  assert.equal(result.recall, 1);
+  assert.throws(() => referenceLabels('frame_index,time_seconds,staff_present\n38,42,1\n', undefined, frames), /timestamp/);
 });

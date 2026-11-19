@@ -1,6 +1,7 @@
 import { readResults, eventsFor, frameAt, makeDemo } from './records.js';
 import { forgetSavedBadgePack, loadSavedBadgePack, parseBadgePack, rememberBadgePack } from './badge-pack.js';
 import { coverageFor, evidenceLabels, pointAtPointer, reviewedExports, setReviewPoint } from './review.js';
+import { benchmarkCsv, labelTemplate, measureBenchmark, referenceLabels } from './benchmark.js';
 
 const $ = id => document.getElementById(id);
 const video = $('video'), preview = $('preview'), brush = preview.getContext('2d');
@@ -14,6 +15,7 @@ let analysis = { enabled: false, requires_key: false };
 let privateBadges = loadSavedBadgePack(), badgesRemembered = Boolean(privateBadges);
 let cancelBrowserRun;
 let pointPreview;
+let benchmark, mismatchIndex;
 const browserMaxBytes = 60 * 1024 * 1024;
 
 function stamp(seconds) {
@@ -188,9 +190,11 @@ function load(data, source, file, demo = false) {
   closePointEditor();
   pause();
   dataset = {
-    ...data, demo, frames: [...data.frames], originalFrames: data.frames, events: eventsFor(data.frames),
+    ...data, source, demo, frames: [...data.frames], originalFrames: data.frames, events: eventsFor(data.frames),
     edits: new Map(), pendingExports: new Set(),
   };
+  benchmark = undefined;
+  $('benchmark-results').hidden = true;
   video.removeAttribute('src'); video.load(); video.hidden = true;
   if (objectUrl) URL.revokeObjectURL(objectUrl);
   objectUrl = undefined;
@@ -226,6 +230,82 @@ function saveCsv(value, filename) {
   const a = document.createElement('a'); a.href = href; a.download = filename; a.click();
   setTimeout(() => URL.revokeObjectURL(href), 1000);
 }
+
+function showBenchmark(result, source) {
+  benchmark = result;
+  mismatchIndex = -1;
+  const { labeled, total, counts, uncertain, medianError, within60, labeledXY, pairedXY, bothClasses } = result;
+  const staff = counts.tp + counts.fn, noStaff = counts.tn + counts.fp;
+  const rate = value => value === null ? 'Unavailable' : percent.format(value);
+  const fields = [
+    ['Precision', rate(result.precision)], ['Recall', rate(result.recall)], ['F1', rate(result.f1)],
+    ['Staff found', staff ? fmt.format(counts.tp) : 'Unavailable'], ['False flags', noStaff ? fmt.format(counts.fp) : 'Unavailable'],
+    ['Staff missed', staff ? fmt.format(counts.fn) : 'Unavailable'],
+    ['No staff, correctly unflagged', noStaff ? fmt.format(counts.tn) : 'Unavailable'],
+    ['Median paired XY error', medianError === null ? 'Unavailable' : `${fmt.format(medianError)} px`],
+    ['Within 60 px', labeledXY ? `${fmt.format(within60)} / ${fmt.format(labeledXY)}` : 'Unavailable'],
+  ];
+  $('benchmark-scope').textContent = `${source} · ${fmt.format(labeled)} of ${fmt.format(total)} frames verified (${percent.format(labeled / total)}) · ${fmt.format(staff)} staff · ${fmt.format(noStaff)} no staff`;
+  $('benchmark-scores').replaceChildren(...fields.map(([label, value]) => {
+    const wrapper = document.createElement('div');
+    wrapper.append(construct('dt', label), construct('dd', value));
+    return wrapper;
+  }));
+  const detail = [
+    bothClasses ? '' : 'Precision and F1 require verified staff and no-staff frames.',
+    `${fmt.format(uncertain)} verified frames were uncertain in the detector output. An uncertain frame counts as unflagged.`,
+    labeledXY ? `XY error pairs the verified center with the nearest prediction in ${fmt.format(pairedXY)} of ${fmt.format(labeledXY)} labeled staff frames. The 60 px count includes missed frames in its denominator.` : '',
+  ].filter(Boolean);
+  $('benchmark-detail').textContent = detail.join(' ');
+  $('benchmark-mismatch').disabled = !(counts.fp + counts.fn);
+  $('benchmark-results').hidden = false;
+  $('benchmark-results-title').focus();
+}
+
+$('benchmark-button').addEventListener('click', () => {
+  $('benchmark-error').hidden = true;
+  $('benchmark-dialog').showModal();
+});
+
+$('benchmark-template').addEventListener('click', () => {
+  saveCsv(labelTemplate(dataset.originalFrames), 'benchmark_labels.csv');
+});
+
+$('benchmark-download').addEventListener('click', () => {
+  saveCsv(benchmarkCsv(benchmark.rows), 'benchmark_results.csv');
+});
+
+$('benchmark-mismatch').addEventListener('click', () => {
+  const mismatches = benchmark.rows.filter(row => ['fp', 'fn'].includes(row.outcome));
+  mismatchIndex = (mismatchIndex + 1) % mismatches.length;
+  seekFrame(mismatches[mismatchIndex].index);
+  $('preview-heading').scrollIntoView({ block: 'nearest' });
+});
+
+$('benchmark-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const current = dataset, error = $('benchmark-error'), dialog = $('benchmark-dialog');
+  const button = event.target.querySelector('[type=submit]');
+  button.disabled = true;
+  error.hidden = true;
+  try {
+    if (current.originalFrames.some(frame => frame.reviewed ||
+      frame.points.some(point => point.evidence === 'manual_review' || point.evidence.startsWith('review_')))) {
+      throw new Error('Load the original detector run as the workspace. Select reviewed files here as reference labels.');
+    }
+    const [frames, xy] = await Promise.all([$('benchmark-frames').files[0].text(), $('benchmark-xy').files[0]?.text()]);
+    if (dataset !== current || !dialog.open) return;
+    const result = measureBenchmark(current.originalFrames, referenceLabels(frames, xy, current.originalFrames));
+    dialog.close();
+    event.target.reset();
+    showBenchmark(result, current.source);
+  } catch (problem) {
+    error.textContent = problem.message;
+    error.hidden = false;
+  } finally {
+    button.disabled = false;
+  }
+});
 
 for (const close of document.querySelectorAll('.dismiss')) close.addEventListener('click', () => close.closest('dialog').close());
 $('demo-button').addEventListener('click', () => load(makeDemo(), 'Synthetic demo', null, true));
