@@ -1,0 +1,64 @@
+# FootfallCam detection workspace
+
+A browser workspace for reviewing frame-by-frame staff badge detection and XY estimates from an overhead video. The Python detector uses badge matching, foreground candidates and motion-supported track links.
+
+## Try the UI on Cloudflare Pages
+
+In **Workers & Pages**, create a **Pages** project with Git integration and connect this repository. Use the `main` production branch, no framework, an empty build command and `web` as the build output directory. [Cloudflare Pages Git integration](https://developers.cloudflare.com/pages/get-started/git-integration/) · [Static HTML setup](https://developers.cloudflare.com/pages/framework-guides/deploy-anything/)
+
+The Pages workspace includes an interactive synthetic scene. Choose **Open results** to load `staff_frames.csv`, `staff_coordinates.csv` and the corresponding MP4 if available. Playback, the frame timeline and XY overlays operate inside the browser. Analysis on a new video uses the local Python server or the optional Cloudflare Container below.
+
+To preview the same static UI locally, run `python -m http.server 8080 --bind 127.0.0.1 --directory web` and open `http://127.0.0.1:8080`.
+
+## Run the detector locally
+
+Install the packages from the repo root using Python 3.13. Keep the assessment's three supplied badge crops (`front.png`, `dark.png`, `light.png`) together in a private folder. They are in `code/assets` in the private assessment submission archive.
+
+```powershell
+py -3.13 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r code\requirements.txt Flask==3.1.2
+$env:FOOTFALLCAM_TEMPLATE_DIR = 'C:\private\footfallcam-badges'
+.\.venv\Scripts\python.exe server.py
+```
+
+Open `http://127.0.0.1:8080` and choose **Analyze video**. Select an MP4 up to 60 MiB, 4,500 frames and 1080p. When detection finishes, inspect the overlay and download both CSV exports. The server handles one job at a time, removes uploaded video after processing and keeps recent results temporarily.
+
+For a direct Python run with an annotated video export, use the same badge folder.
+
+```powershell
+.\.venv\Scripts\python.exe code\run.py --input 'C:\private\video.mp4' --templates $env:FOOTFALLCAM_TEMPLATE_DIR --output output --visualize
+.\.venv\Scripts\python.exe code\verify.py output
+```
+
+## Run the full analyzer on Cloudflare Workers
+
+The Worker serves the UI from `web/` and forwards authenticated video analysis jobs to the Linux Python container in `Dockerfile`. This route uses **Workers Paid** and a running Docker-compatible engine for local deployment. [Cloudflare Containers](https://developers.cloudflare.com/containers/get-started/) · [Container pricing](https://developers.cloudflare.com/containers/platform/pricing/)
+
+From the repo root, use the Wrangler CLI to log in and deploy the included configuration. Set a strong private analysis key and send the badge crops directly to the Worker secret over stdin.
+
+```powershell
+npx wrangler login
+npx wrangler deploy
+npx wrangler secret put FOOTFALLCAM_ACCESS_KEY
+.\.venv\Scripts\python.exe pack_badges.py $env:FOOTFALLCAM_TEMPLATE_DIR | npx wrangler secret put FOOTFALLCAM_TEMPLATES
+```
+
+Use the `workers.dev` URL printed by Wrangler. Once the container is ready and both secrets are configured, **Analyze video** appears. Enter the analysis key to run the same Python tracker from the browser. The site can still serve its viewer while the detector is warming up. Container results are temporary, so download the CSV exports after each run. [Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
+
+## Assessment retest
+
+| Metric | Original detector | Improved detector |
+| --- | ---: | ---: |
+| Automatically flagged frames | 203 | 772 |
+| Within 40 px of the reviewed center | 85 | 501 |
+| Within 60 px of the reviewed center | 151 | 698 |
+| Median XY difference on flagged frames | 43.4 px | 30.0 px |
+
+Both modes processed the same 1,341-frame overhead clip without a review file. The earlier visual review was used afterward to score XY. The improved tracker links two supported badge sightings using optical flow and foreground continuity. Its longest permitted bridge is 14 seconds, with tighter limits for an extension supported on one side. It still misses some stationary or obscured wearers and can drift at crossings. Accuracy on unseen real footage remains unmeasured.
+
+The public repository contains source code, aggregate scores and the synthetic viewer demo. The original footage, annotated recordings, assessment imagery, badge crops and per-frame assessment results are distributed separately in the submission archive.
+
+```powershell
+npm test
+.\.venv\Scripts\python.exe -m unittest discover -s code\tests -v
+```
