@@ -45,6 +45,8 @@ def verify(directory):
         actual = set(row['staff_ids'].split('|')) if row['staff_ids'] else set()
         check(actual == by_frame[f], f'Staff IDs disagree with coordinates for frame {f}')
         check(int(row['staff_present']) == bool(actual), f'Staff flag disagrees with coordinates for frame {f}')
+        if 'staff_count' in row:
+            check(row['staff_count'] == str(len(actual)), f'Staff count disagrees with coordinates for frame {f}')
         check((row['status'] == 'present') == bool(actual), f'Status disagrees with labels for frame {f}')
         check(math.isclose(float(row['time_seconds']), f/fps, abs_tol=1e-6), f'Bad frame timestamp {f}')
         flags.append(bool(actual))

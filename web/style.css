@@ -95,6 +95,7 @@ h3 { font-size: .86rem; }
 .view.placing video { pointer-events: none; }
 .placement { top: auto; bottom: 10px; pointer-events: none; color: #d5f5ff; }
 .badge.reviewed { color: #204e69; background: #e5f2f9; }
+.count-badge { color: #1b664f; background: #e6f5ed; }
 .controls { display: flex; align-items: center; gap: 8px; padding: 12px 12px 8px; }
 .controls button { min-height: 32px; }
 .play { min-width: 62px; padding: 5px 9px; }

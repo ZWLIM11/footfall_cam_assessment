@@ -12,6 +12,8 @@ After analysis, use **Show uncertain** to filter the event list or **Next uncert
 
 **Tracking coverage** reports the percentage of frames with XY points and the counts by point source. A direct match uses the badge center. Optical flow and foreground continuity connect strong sightings, and linked points use the foreground region center. Short gaps are interpolated, and a short extension can follow the same foreground region from a single sighting.
 
+As you scrub, **Frame details** shows the staff count, time, and XY points for that frame. The frames CSV includes `staff_count` for each timestamp, and the coordinates CSV lists each detection with its staff ID and XY. A frame flagged uncertain can have zero detections while it awaits review. When reopening older exports, the workspace uses their staff IDs and coordinates to reconstruct the count where available.
+
 ## Benchmark a detector run
 
 Load the original automatic results and choose **Benchmark**. Download the label template and fill in `staff_present` with 1 for verified staff and 0 for verified no staff. Leave unchecked frames blank. You can add one verified `x_center,y_center` pair in original pixels per staff frame, or use the reviewed CSV pair as reference. In a reviewed pair only manually reviewed frames and coordinates count. Compare labels from the same clip using zero-based frame indexes.

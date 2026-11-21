@@ -1,4 +1,4 @@
-import { readCsv } from './records.js';
+import { frameCsvWithCounts, readCsv, readResults, writeCsv } from './records.js';
 
 export const evidenceLabels = {
   auto_badge: 'Badge match',
@@ -48,24 +48,17 @@ export function setReviewPoint(frame, target, id, x, y, width, height) {
   }
   const points = [...frame.points];
   points[index] = { id: staffId, x, y, evidence: 'manual_review' };
-  return { ...frame, status: 'present', reviewed: true, points };
-}
-
-function writeCsv(header, rows) {
-  const cell = value => {
-    const string = String(value ?? '');
-    return /[",\r\n]/.test(string) ? `"${string.replaceAll('"', '""')}"` : string;
-  };
-  return [header.map(cell).join(','), ...rows.map(row => header.map(key => cell(row[key])).join(','))].join('\r\n') + '\r\n';
+  return { ...frame, status: 'present', reviewed: true, points, staffCount: points.length };
 }
 
 function addColumns(header, names) {
   return [...new Set([...header, ...names])];
 }
 
-export function reviewedExports(frameCsv, xyCsv, edits) {
-  if (!edits.size) return { frameCsv, xyCsv };
-  const { header: frameHeader, rows: frameRows } = readCsv(frameCsv);
+export function reviewedExports(frameCsv, xyCsv, edits, originalFrames = readResults(frameCsv, xyCsv)) {
+  const withCounts = frameCsvWithCounts(frameCsv, originalFrames);
+  if (!edits.size) return { frameCsv: withCounts, xyCsv };
+  const { header: frameHeader, rows: frameRows } = readCsv(withCounts);
   const { header: xyHeader, rows: xyRows } = readCsv(xyCsv);
   const untouched = [], originalByFrame = new Map();
   for (const row of xyRows) {
@@ -82,6 +75,7 @@ export function reviewedExports(frameCsv, xyCsv, edits) {
     row.staff_present = points.length ? 1 : 0;
     row.status = points.length ? 'present' : 'reviewed_no_staff';
     row.staff_ids = points.map(point => point.id).join('|');
+    row.staff_count = points.length;
     row.review_status = 'reviewed';
     const originals = originalByFrame.get(index) ?? [];
     for (const point of points) {

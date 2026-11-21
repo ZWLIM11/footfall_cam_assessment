@@ -15,8 +15,8 @@ sys.path.insert(0, str(ROOT))
 
 from continuity import MotionHistory, Sighting, solve_bridge
 from review import checksum, load_review
-from run import input_video, intervals, run
-from verify import verify
+from run import export, input_video, intervals, merge_results, run
+from verify import rows, verify
 from vision import Candidate, Track, associate, classify, proposals
 
 
@@ -47,6 +47,18 @@ class PipelineTests(unittest.TestCase):
 
     def test_intervals_do_not_bridge_one_frame(self):
         self.assertEqual(list(intervals([1, 1, 0, 1])), [(0, 1), (3, 3)])
+
+    def test_export_counts_each_staff_detection_only_in_its_frame(self):
+        person = (12, 34, 'auto_badge', None, .96)
+        second = (56, 78, 'auto_bridge', None, None)
+        automatic = {0: {'staff_1': person, 'staff_2': second}, 1: {'staff_1': person}}
+        frames, locations, quality = merge_results([[], [], []], automatic, {}, {}, False, .92, False)
+        with TemporaryDirectory() as name:
+            args = SimpleNamespace(output=Path(name))
+            export(args, frames, locations, quality, [], automatic, {}, {}, 25)
+            values = rows(args.output / 'staff_frames.csv')
+            self.assertEqual([row['staff_count'] for row in values], ['2', '1', '0'])
+            self.assertEqual([row['staff_present'] for row in values], ['1', '1', '0'])
 
     def test_motion_bridge_handles_short_missing_detection_but_rejects_cut(self):
         history = MotionHistory(384, 216, True)

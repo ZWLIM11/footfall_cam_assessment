@@ -1,4 +1,4 @@
-import { readResults, eventsFor, frameAt, makeDemo } from './records.js';
+import { readResults, eventsFor, frameAt, makeDemo, staffCountFor } from './records.js';
 import { forgetSavedBadgePack, loadSavedBadgePack, parseBadgePack, rememberBadgePack } from './badge-pack.js';
 import { coverageFor, evidenceLabels, pointAtPointer, reviewedExports, setReviewPoint } from './review.js';
 import { benchmarkCsv, labelTemplate, measureBenchmark, referenceLabels } from './benchmark.js';
@@ -141,6 +141,9 @@ function showFrame(next, seekVideo = false) {
   $('seek').setAttribute('aria-valuetext', `Frame ${index}, ${stamp(frame.time)}`);
   $('time').textContent = stamp(frame.time);
   $('frame-label').textContent = `Frame ${index} of ${dataset.frames.length - 1} · ${stamp(frame.time)}`;
+  const staffCount = staffCountFor(frame);
+  $('frame-staff-count').textContent = staffCount === null ? 'Staff count unavailable' :
+    `${fmt.format(staffCount)} staff ${frame.reviewed ? 'after review' : 'detected'}`;
   $('frame-status').className = `badge ${frame.status}${frame.reviewed ? ' reviewed' : ''}`;
   $('frame-status').textContent = frame.reviewed ? frame.status === 'present' ? 'Staff · reviewed' : 'No staff · reviewed' : statusText[frame.status];
   const people = $('people'); people.replaceChildren();
@@ -327,7 +330,7 @@ function updateExportNote() {
 }
 
 function exportCsv(key, filename) {
-  const values = reviewedExports(dataset.frameCsv, dataset.xyCsv, dataset.edits);
+  const values = reviewedExports(dataset.frameCsv, dataset.xyCsv, dataset.edits, dataset.originalFrames);
   saveCsv(values[key], dataset.edits.size ? `${filename}_reviewed.csv` : `${filename}.csv`);
   dataset.pendingExports.delete(key);
   updateExportNote();

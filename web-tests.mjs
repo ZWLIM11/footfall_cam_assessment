@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { eventsFor, frameAt, makeDemo, readCsv, readResults } from './web/records.js';
+import { eventsFor, frameAt, makeDemo, readCsv, readResults, staffCountFor } from './web/records.js';
 import { forgetSavedBadgePack, loadSavedBadgePack, parseBadgePack, rememberBadgePack } from './web/badge-pack.js';
 import { coverageFor, pointAtPointer, reviewedExports, setReviewPoint } from './web/review.js';
 import { benchmarkCsv, labelTemplate, measureBenchmark, referenceLabels } from './web/benchmark.js';
@@ -77,6 +77,7 @@ test('review exports keep frame flags, provenance and unaffected coordinate rows
   const points = readCsv(exported.xyCsv).rows;
   assert.equal(flags[1].detector_status, 'uncertain');
   assert.equal(flags[1].staff_ids, 'auto_1');
+  assert.deepEqual(flags.map(row => row.staff_count), ['2', '1', '0']);
   assert.equal(flags[2].status, 'reviewed_no_staff');
   assert.equal(flags[2].staff_present, '0');
   assert.equal(points.length, 3);
@@ -95,7 +96,20 @@ test('review exports keep frame flags, provenance and unaffected coordinate rows
   assert.equal(stats.points.manual_review, 2);
   assert.equal(stats.points.auto_bridge, 1);
   assert.deepEqual(stats.pending, []);
-  assert.deepEqual(reviewedExports(frameCsv, xyCsv, new Map()), { frameCsv, xyCsv });
+  const unedited = reviewedExports(frameCsv, xyCsv, new Map());
+  assert.equal(unedited.xyCsv, xyCsv);
+  assert.deepEqual(readCsv(unedited.frameCsv).rows.map(row => row.staff_count), ['2', '0', '1']);
+});
+
+test('counts detections per frame, including zero on uncertain frames, and imports older pairs', () => {
+  const frameCsv = 'frame_index,time_seconds,staff_present,status,staff_ids\n0,0,1,present,a|b\n1,.04,1,present,a\n2,.08,0,uncertain,\n3,.12,1,present,\n';
+  const xyCsv = 'frame_index,staff_id,x_center,y_center\n0,a,31,90\n0,b,82,14\n1,a,32,92\n';
+  const frames = readResults(frameCsv, xyCsv);
+  assert.deepEqual(frames.map(staffCountFor), [2, 1, 0, null]);
+  const upgraded = reviewedExports(frameCsv, xyCsv, new Map());
+  assert.deepEqual(readResults(upgraded.frameCsv, upgraded.xyCsv).map(staffCountFor), [2, 1, 0, null]);
+  assert.throws(() => readResults(upgraded.frameCsv.replace('a|b,2','a|b,1'), xyCsv), /Staff count disagrees/);
+  assert.throws(() => readResults(frameCsv, xyCsv + '0,a,35,92\n'), /appears twice/);
 });
 
 test('maps preview clicks to original pixels and ignores letterboxed space', () => {

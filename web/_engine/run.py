@@ -116,7 +116,7 @@ def merge_results(frame_boxes, automatic, review, excluded, complete, threshold,
             locations.append((fi, staff_id, x, y, evidence, box, score))
             if evidence.startswith('review_occluded'):
                 quality.append((fi, 'reviewed_partial_visibility', None))
-        frames.append((int(bool(chosen)), status, '|'.join(sorted(chosen))))
+        frames.append((int(bool(chosen)), status, '|'.join(sorted(chosen)), len(chosen)))
     return frames, locations, quality
 
 
@@ -133,7 +133,7 @@ def export(args, frames, locations, quality, tracks, auto, comparison, baseline,
     def stamp(f):
         return f'{f/fps:.6f}'
 
-    write_csv(directory / 'staff_frames.csv', ['frame_index', 'time_seconds', 'staff_present', 'status', 'staff_ids'],
+    write_csv(directory / 'staff_frames.csv', ['frame_index', 'time_seconds', 'staff_present', 'status', 'staff_ids', 'staff_count'],
               ((fi, stamp(fi), *result) for fi, result in enumerate(frames)))
     write_csv(directory / 'staff_coordinates.csv',
               ['frame_index', 'time_seconds', 'staff_id', 'x_center', 'y_center', 'evidence',
@@ -164,7 +164,7 @@ def annotate(video, output, frames, locations, width, height, fps):
     try:
         if not writer.isOpened():
             raise ValueError(f'Could not open MP4 writer for {output}.')
-        for frame_index, (_, status, _) in enumerate(frames):
+        for frame_index, (_, status, _, _) in enumerate(frames):
             ok, frame = cap.read()
             if not ok:
                 raise ValueError(f'Could not render frame {frame_index}.')

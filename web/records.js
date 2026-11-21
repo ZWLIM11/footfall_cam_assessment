@@ -25,6 +25,14 @@ export function readCsv(source) {
   return { header, rows: rows.map(values => Object.fromEntries(header.map((key, i) => [key, values[i]]))) };
 }
 
+export function writeCsv(header, rows) {
+  const cell = value => {
+    const string = String(value ?? '');
+    return /[",\r\n]/.test(string) ? `"${string.replaceAll('"', '""')}"` : string;
+  };
+  return [header.map(cell).join(','), ...rows.map(row => header.map(key => cell(row[key])).join(','))].join('\r\n') + '\r\n';
+}
+
 function number(value) {
   return value === undefined || value.trim() === '' ? NaN : Number(value);
 }
@@ -56,13 +64,43 @@ export function readResults(frameCsv, xyCsv) {
     if (!Number.isInteger(index) || frames[index]?.status !== 'present' || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0) {
       throw new Error('A coordinate row does not match the frame flags or contains invalid XY values.');
     }
+    if (row.staff_id && frames[index].points.some(point => point.id === row.staff_id)) {
+      throw new Error(`A staff ID appears twice on frame ${index}.`);
+    }
     const badgeScore = number(row.badge_score);
     frames[index].points.push({
       id: row.staff_id, x, y, evidence: row.evidence || row.method || 'Imported coordinate',
       badgeScore: Number.isFinite(badgeScore) ? badgeScore : undefined,
     });
   }
+  frames.forEach((frame, index) => {
+    const row = framesFile.rows[index];
+    const ids = new Set(row.staff_ids?.split('|').filter(Boolean));
+    const minimum = Math.max(ids.size, frame.points.length);
+    if (row.staff_count?.trim()) {
+      const count = number(row.staff_count);
+      if (!Number.isSafeInteger(count) || count < minimum || row.staff_present !== String(Number(count > 0))) {
+        throw new Error(`Staff count disagrees with the flags or detections on frame ${index}.`);
+      }
+      frame.staffCount = count;
+    } else {
+      frame.staffCount = frame.status === 'present' ? minimum || null : 0;
+    }
+  });
   return frames;
+}
+
+export function staffCountFor(frame) {
+  return frame.status === 'present' ? frame.staffCount ?? (frame.points.length || null) : 0;
+}
+
+export function frameCsvWithCounts(frameCsv, frames) {
+  const { header, rows } = readCsv(frameCsv);
+  const counts = frames.map(frame => String(staffCountFor(frame) ?? ''));
+  if (header.includes('staff_count') && rows.every((row, index) => row.staff_count === counts[index])) return frameCsv;
+  if (!header.includes('staff_count')) header.push('staff_count');
+  rows.forEach((row, index) => { row.staff_count = counts[index]; });
+  return writeCsv(header, rows);
 }
 
 export function eventsFor(frames) {
@@ -96,10 +134,10 @@ export function makeDemo() {
     return { time: i / 12.5, status: present ? 'present' : active(dim, i) ? 'uncertain' : 'empty',
       points: present ? [{ id: 'demo_1', x, y, evidence: i % 19 === 0 ? 'auto_badge' : 'auto_bridge' }] : [] };
   });
-  const flag = ['frame_index,time_seconds,staff_present,status,staff_ids'];
+  const flag = ['frame_index,time_seconds,staff_present,status,staff_ids,staff_count'];
   const xy = ['frame_index,time_seconds,staff_id,x_center,y_center,evidence'];
   frames.forEach(({ time, status, points }, i) => {
-    flag.push([i, time.toFixed(6), Number(status === 'present'), status === 'empty' ? 'not_detected' : status, points[0]?.id || ''].join(','));
+    flag.push([i, time.toFixed(6), Number(status === 'present'), status === 'empty' ? 'not_detected' : status, points.map(point => point.id).join('|'), points.length].join(','));
     for (const point of points) xy.push([i, time.toFixed(6), point.id, point.x.toFixed(1), point.y.toFixed(1), point.evidence].join(','));
   });
   return { frames, frameCsv: flag.join('\n') + '\n', xyCsv: xy.join('\n') + '\n' };
